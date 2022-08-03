@@ -62,13 +62,6 @@ str(avg.CDS)
 data<-data.frame(Participant, VOCAB_18mo_CDI, avg.CDS, avg.ADS, avg.CTC, SES)
 
 
-# GLM
-library(lme4)
-
-
-fit <- glmer(VOCAB_18mo_CDI ~ -1 + avg.CDS + avg.ADS + avg.CTC*SES + (1|Participant), family=poisson(link = log))
-summary(fit)
-
 # HGLM
 data<-na.omit(data) 
 
@@ -76,13 +69,22 @@ library(hglm)
 turns.pois<-hglm(fixed = VOCAB_18mo_CDI ~ -1 + avg.CDS + avg.CTC*SES,
               random = ~ 1|Participant,
               family = poisson(link = log),
-              rand.family = gaussian(link = identity), data=data)
+              rand.family = gaussian(link = identity), data=data, calc.like = TRUE)
 summary(turns.pois) 
+
+lrt(turns.pois)
+plot(turns.pois)
 
 data$Prediction<-round(exp(turns.pois$fixef[1]*data$avg.CDS +
                                    turns.pois$fixef[2]*data$avg.CTC +
                                    turns.pois$fixef[3]*data$SES +
                                    turns.pois$fixef[4]*(data$SES*data$avg.CTC)))
+
+
+exp(-1.095e-02) 
+exp(1.142e-02)
+exp(6.760e-02)
+exp(-1.587e-04)
 
 # order data by vocabulary
 
@@ -154,6 +156,8 @@ attach(mydata)
 library(plyr)
 library(tidyverse)
 mydata2<-mydata %>% filter(CDS == 0 & Age == 12)
+table(mydata2$Utterance_type)/nrow(mydata2)
+
 mydata3<-mydata %>% filter(CDS == 0 & Age == 18)
 
 mydata4<-mydata %>% filter(Age == 6 & Participant==c("S1","S2"))
@@ -170,21 +174,57 @@ mydata7<-mydata %>% filter(Participant=="TCH")
 t2<-count(mydata$Transcription[CDS==0])
 t2
 
+# TCS utterance type distribution
+df = tibble::as_tibble(mydata7)
+
+d <- df %>%
+  group_by(Age,Utterance_type) %>%
+  dplyr::summarise(Total = n()) %>%
+  mutate(freq=Total/sum(Total))
+
+ggplot(d,
+       aes(x = factor(Age),
+           y=freq,
+           fill = Utterance_type)
+) +
+  geom_bar(position="dodge",stat="identity") +
+  ggtitle("6 m.o.") +
+  labs(x="Participants", y ="Relative Frequency")
+
+
+# Transcription - frequency in child speech
+
 library(DT)
 mm<-as.data.frame(sort(table(mydata2$Transcription), decreasing = T))
-datatable(mm)
+datatable(mm, options = list(dom = 't', pageLength=20), colnames=c("Child Utterance", "Frequency"), caption = "12 m.o.") %>%
+  formatStyle(
+    'Var1',
+    color = styleEqual(c('Kar-kar', 'Av-av', 'Te-te = fallen', '("smelling")', 'Aj-aj-aj ("blame")', 'Moo', '("fish")', '("sleeping")', '("scary")','Hallo?=telephone', 'Kwa-kwa', '("swing")','("elefant"), ("fish")', 'Am!','Av-av! Kar, av, kar, kar'), 
+                       c('orange', 'orange','orange','orange','orange','orange','orange','orange','orange','orange','orange','orange','orange','orange','orange'))
+  )
+  
+
+
 mm2<-as.data.frame(sort(table(mydata3$Transcription), decreasing = T))
-datatable(mm2)
+datatable(mm2, options = list(dom = 't', pageLength=20), colnames=c("Child Utterance", "Frequency"), caption = "18 m.o.") %>%
+  formatStyle(
+    'Var1',
+    color = styleEqual(c('Njam-njam', '("sleeping")', 'Av-av','("excitement")', '("elefant")', 'Kar-kar'), 
+                       c('orange', 'orange','orange','orange','orange','orange'))
+  )
+
+
 
 require(ggplot2)
 
+#S2
 # 6 mo
 
 df = tibble::as_tibble(mydata41)
 
 d <- df %>%
   group_by(Participant,Utterance_type) %>%
-  summarise(Total = n()) %>%
+  dplyr::summarise(Total = n()) %>%
   mutate(freq=Total/sum(Total))
 
 ggplot(d,
@@ -324,12 +364,42 @@ ggplot(d,
 
 mydata24<-mydata %>% filter(Age == 6 & CDS==0 & Utterance_type=="Icon") #0
 mydata25<-mydata %>% filter(Age == 6 & CDS==1 & Utterance_type=="Icon") #10
+mydata251<-mydata %>% filter(Age == 6 & CDS==1)
+10/nrow(mydata251) # 4%
 
 mydata26<-mydata %>% filter(Age == 12 & CDS==0 & Utterance_type=="Icon") #195
+mydata261<-mydata %>% filter(Age == 12 & CDS==0)
+195/nrow(mydata261)# 17.2%
+
 mydata27<-mydata %>% filter(Age == 12 & CDS==1 & Utterance_type=="Icon") #128
+mydata271<-mydata %>% filter(Age == 12 & CDS==1)
+128/nrow(mydata271)# 10%
 
 mydata28<-mydata %>% filter(Age == 18 & CDS==0 & Utterance_type=="Icon") #100
+mydata281<-mydata %>% filter(Age == 18 & CDS==0)
+100/nrow(mydata281)# 11.8%
+
 mydata29<-mydata %>% filter(Age == 18 & CDS==1 & Utterance_type=="Icon") #52
+mydata291<-mydata %>% filter(Age == 18 & CDS==1)
+52/nrow(mydata291)# 6%
+
+Adult<-c(4,10,6)
+Child<-c(0,17.2,11.8)
+Age<-c(6,12,18)
+data<-data.frame(Adult=Adult, Child=Child, Age=Age)
+install.packages("GGally")
+library(GGally)
+
+data_long <- gather(data, Speaker, Value, Adult:Child, factor_key=TRUE)
+
+data_long %>% 
+ggplot(aes(x=factor(Age), y=Value, fill=Speaker))+
+  geom_bar(stat="identity",position="dodge")+
+  xlab("Age")+
+  ylab("Relative Frequency")+
+  scale_fill_manual(name="Speaker",values = c("#FFA373","#50486D"))+
+  ggtitle("Iconicity Share in Child and Adult Speech") +
+  theme_calc()
 
 # Language
 summary(mydata$Language)
@@ -359,16 +429,6 @@ data_long <- gather(mydata20, Age, Language, Age, Language, factor_key=TRUE)
 # more on long to wide and back:
 # http://www.cookbook-r.com/Manipulating_data/Converting_data_between_wide_and_long_format/
 
-
-gg4 <- ggplot(data_long, aes(fill=Language, y=Value, x=Age)) + 
-  geom_bar(position="stack", stat="identity")+
-  labs(x = "Date",
-       y = "Input (direct vs. indirect)",
-       color = "Languages",
-       title="Exposure to Main Languages_Nadine_Minutes_Daily_Stacked Barchart") +
-  scale_fill_manual(values = colors) 
-
-gg4
 
 # Standardized colours
 
@@ -471,3 +531,135 @@ ggplot(d,
   labs(x="Participants", y ="Relative Frequency") +
   scale_fill_manual(values = colors) 
 
+table(mydata41)
+
+# Stacked barchart
+
+library(ggplot2)
+install.packages("viridis")
+library(viridis)
+install.packages("ggthemes")
+library(ggthemes)
+
+mydata1<-mydata %>% filter(CDS == 0)
+
+Relative_Frequency<-1
+
+ggplot(mydata1, aes(fill=Utterance_type, y=Relative_Frequency, x=Age)) + 
+  geom_bar(position="fill", stat="identity") +
+  ggtitle("Target Child Production (% of Utterance Type)") +
+  scale_fill_excel() +
+  theme_excel()
+
+df = tibble::as_tibble(mydata1)
+
+d <- df %>%
+  group_by(Age,Utterance_type) %>%
+  summarise(Total = n()) %>%
+  mutate(freq=Total/sum(Total))
+
+mydata2<-mydata %>% filter(CDS == 1 & Participant== c("S1", "S2", "S3"))
+
+Relative_Frequency<-1
+
+ggplot(mydata2, aes(fill=Utterance_type, y=Relative_Frequency, x=Age)) + 
+  geom_bar(position="fill", stat="identity") +
+  ggtitle("Caregiver Production (% of Utterance Type)") +
+  scale_fill_ptol() +
+  theme_minimal()
+
+df = tibble::as_tibble(mydata2)
+
+d <- df %>%
+  group_by(Age,Utterance_type) %>%
+  summarise(Total = n()) %>%
+  mutate(freq=Total/sum(Total))
+
+mydata3<-mydata2 %>% filter(!(Age == 6 & Participant == 'S3'))
+
+ggplot(mydata3, aes(fill=Utterance_type, y=Relative_Frequency, x=Age)) + 
+  geom_bar(position="fill", stat="identity") +
+  ggtitle("Caregiver Production by Speaker (% of Utterance Type)") +
+  scale_fill_ptol() +
+  theme_minimal() +
+  facet_wrap(~Participant)
+
+ 
+df = tibble::as_tibble(mydata3)
+
+d <- df %>%
+  group_by(Age,Participant,Utterance_type) %>%
+  summarise(Total = n()) %>%
+  mutate(freq=Total/sum(Total)) 
+  
+S1.6<-c(0,15,22.5,2.5,2.5,5,12.5,2.5,37.5)
+S2.6<-c(11.5384615,19.2307692,15.3846154,0,19.2307692,0,19.2307692,0,15.3846154)
+S1.12<-c(0.7434944,21.9330855,18.2156134,13.0111524,7.0631970,5.2044610,12.2676580,1.1152416,20.4460967)
+S2.12<-c(2.3255814,13.9534884,22.0930233,9.3023256,23.2558140,2.3255814,17.4418605,3.4883721,5.8139535)
+S3.12<-c(2.7777778,2.7777778,16.6666667,5.5555556,44.4444444,5.5555556,19.4444444,0,2.7777778)
+S2.18<-c(2.7173913,34.7826087,5.4347826,4.8913043,12.50,4.8913043,26.0869565,3.2608696,5.4347826)
+S3.18<-c(2.5,12.50,21.6666667,2.5,18.3333333,5.8333333,34.1666667,0,2.5)
+
+S1<-data.frame(S1.6, S1.12)
+S1.means<-rowMeans(S1)
+S2<-data.frame(S2.6, S2.12, S2.18)
+S2.means<-rowMeans(S2)
+S3<-data.frame(S3.12, S3.18)
+S3.means<-rowMeans(S3)
+
+databoom<-data.frame(S1.means, S2.means, S3.means)
+data_long <- gather(databoom, Subject, Value, S1.means:S3.means, factor_key=TRUE)
+anova <- aov(Value ~ Subject, data = data_long)
+summary(anova)
+
+anova <- aov(freq ~ Participant*Utterance_type, data = d)
+summary(anova)
+
+library(tidyverse)
+install.packages("ggpubr")
+library(ggpubr)
+install.packages("rstatix")
+library(rstatix)
+# Build the linear model
+model  <- lm(freq ~ Participant*Utterance_type, data = d)
+# Create a QQ plot of residuals
+ggqqplot(residuals(model))
+# Compute Shapiro-Wilk test of normality
+shapiro_test(residuals(model))
+
+bxp <- ggboxplot(
+  d2, x = "Utterance_type", y = "Mean", 
+  color = "Utterance_type", palette = "jco", facet.by = "Participant"
+)
+bxp
+
+oneway.test(Total ~ Participant, data = d2, var.equal = TRUE)
+
+anova <- aov(Total ~ Participant, data = d)
+summary(anova)
+
+anova <- aov(freq ~ Utterance_type*Participant, data = d)
+summary(anova)
+
+d2 <- d %>%
+  group_by(Utterance_type, Participant) %>%
+  summarise(Mean = mean(freq)) 
+
+d2$Mean<-d2$Mean*100
+m <- lm(Mean ~ Participant, data = d2)
+summary(m)
+
+d %>%
+  group_by(Utterance_type) %>%
+  get_summary_stats(freq, type = "mean_sd")
+
+d %>%
+  group_by(Participant) %>%
+  shapiro_test(freq)
+
+install.packages("lsr")
+library(lsr)
+model <- aov(freq ~ Participant*Utterance_type, data = d)
+model
+summary(model)
+etaSquared(model)
